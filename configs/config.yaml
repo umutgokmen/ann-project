@@ -1,0 +1,45 @@
+data:
+  dataset_dir: "data/raw/stanford_cars"
+  processed_dir: "data/processed"
+  num_classes: 196
+  image_size: 224
+  val_split: 0.15
+  test_split: 0.15
+  num_workers: 4
+
+model:
+  backbone: "efficientnet_b4"  # or resnet50, efficientnet_b0
+  pretrained: true
+  dropout: 0.3
+
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  # LR scheduler
+  scheduler: "cosine"
+  warmup_epochs: 5
+  # Mixed precision
+  amp: true
+  # Gradient clipping
+  grad_clip: 1.0
+
+augmentation:
+  random_resized_crop: true
+  horizontal_flip: true
+  color_jitter:
+    brightness: 0.3
+    contrast: 0.3
+    saturation: 0.3
+    hue: 0.1
+  random_rotation: 15
+  mixup_alpha: 0.2
+  cutmix_alpha: 1.0
+
+logging:
+  log_dir: "logs"
+  checkpoint_dir: "checkpoints"
+  save_top_k: 3
+  log_every_n_steps: 10
