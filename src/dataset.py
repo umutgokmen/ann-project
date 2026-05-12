@@ -28,16 +28,22 @@ class StanfordCarsDataset(Dataset):
         self.samples, self.class_to_idx, self.classes = self._load_samples(class_to_idx)
 
     def _load_samples(self, class_to_idx: Optional[dict]):
-        # Support both the original mat-based layout and a flat folder layout
-        mat_path = self.root / "devkit" / "cars_annos.mat"
-        if mat_path.exists():
-            return self._load_from_mat(mat_path, class_to_idx)
+        # Layout A: single cars_annos.mat (original Stanford release)
+        if (self.root / "devkit" / "cars_annos.mat").exists():
+            return self._load_from_combined_mat(class_to_idx)
+        # Layout B: separate train/test annos + cars_meta.mat (Kaggle release)
+        if (self.root / "devkit" / "cars_train_annos.mat").exists():
+            return self._load_from_split_mat(class_to_idx)
+        # Layout C: ImageFolder-style directories
         return self._load_from_folders(class_to_idx)
 
-    def _load_from_mat(self, mat_path: Path, class_to_idx: Optional[dict]):
-        annos = loadmat(str(mat_path))
-        class_names = [str(c[0]) for c in annos["class_names"][0]]
+    def _class_names_from_meta(self) -> list[str]:
+        meta = loadmat(str(self.root / "devkit" / "cars_meta.mat"))
+        return [str(c[0]) for c in meta["class_names"][0]]
 
+    def _load_from_combined_mat(self, class_to_idx: Optional[dict]):
+        annos = loadmat(str(self.root / "devkit" / "cars_annos.mat"))
+        class_names = [str(c[0]) for c in annos["class_names"][0]]
         if class_to_idx is None:
             class_to_idx = {name: idx for idx, name in enumerate(class_names)}
 
@@ -45,12 +51,33 @@ class StanfordCarsDataset(Dataset):
         samples = []
         for anno in annos["annotations"][0]:
             fname = str(anno["fname"][0])
-            label = int(anno["class"][0][0]) - 1  # 1-indexed -> 0-indexed
+            label = int(anno["class"][0][0]) - 1
             flag = bool(anno["test"][0][0])
             if flag == is_test:
-                img_path = self.root / fname
-                samples.append((str(img_path), label))
+                samples.append((str(self.root / fname), label))
+        return samples, class_to_idx, class_names
 
+    def _load_from_split_mat(self, class_to_idx: Optional[dict]):
+        class_names = self._class_names_from_meta()
+        if class_to_idx is None:
+            class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+
+        if self.split in ("train", "val"):
+            mat = loadmat(str(self.root / "devkit" / "cars_train_annos.mat"))
+            img_dir = self.root / "cars_train"
+        else:
+            # prefer withlabels version if present
+            withlabels = self.root / "cars_test_annos_withlabels.mat"
+            devkit_test = self.root / "devkit" / "cars_test_annos_withlabels.mat"
+            mat_path = withlabels if withlabels.exists() else devkit_test
+            mat = loadmat(str(mat_path))
+            img_dir = self.root / "cars_test"
+
+        samples = []
+        for anno in mat["annotations"][0]:
+            fname = str(anno["fname"][0])
+            label = int(anno["class"][0][0]) - 1
+            samples.append((str(img_dir / fname), label))
         return samples, class_to_idx, class_names
 
     def _load_from_folders(self, class_to_idx: Optional[dict]):
